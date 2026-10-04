@@ -48,6 +48,21 @@ for h in dt.history():
     print(f"  v{h['version']}  {h['operation']}  {h.get('operationMetrics', {})}")
 
 # %% [markdown]
+# ### 2b. Evidence: list `_delta_log/` and print commit 0 (one JSON action per line)
+
+# %%
+import json
+from pathlib import Path
+
+log_dir = Path(table_path) / "_delta_log"
+for f in sorted(log_dir.iterdir()):
+    print(f"{f.name:<28} {f.stat().st_size:>6} B")
+print("\nCommit 00000000000000000000.json:")
+for line in (log_dir / "00000000000000000000.json").read_text().splitlines():
+    action = json.loads(line)
+    print(json.dumps(action, indent=2)[:700])
+
+# %% [markdown]
 # ## 3. Schema enforcement — try to write a wrong schema
 
 # %%
@@ -110,3 +125,18 @@ for k, v in checks.items():
     print(f"  [{'PASS' if v else 'FAIL'}] {k}")
 assert all(checks.values()), "NB1 incomplete — see FAIL rows above"
 print("\nNB1 complete.")
+
+# %% [markdown]
+# ## Giải thích kết quả (NB1)
+#
+# - **Transaction log:** cell 2b cho thấy `_delta_log/00000000000000000000.json` gồm các action
+#   `commitInfo`, `protocol`, `metaData` (chứa `schemaString`) và `add` (đường dẫn file parquet,
+#   `numRecords`, stats min/max/nullCount). Bảng Delta = thư mục parquet + log; reader *replay* log
+#   để biết file nào đang thuộc version hiện tại. Commit atomic vì version N chỉ "tồn tại" khi
+#   file `N.json` được ghi thành công (put-if-absent) — đó là nền của ACID.
+# - **Schema enforcement:** append với `age="thirty"` bị chặn
+#   (`Cannot cast string 'thirty' to value of Int64 type`). Bằng chứng thật là output cell này
+#   và việc log cuối cùng chỉ có 2 commit (v0 WRITE + v1 append có `tier`) — bad write không tạo commit.
+#   Dòng PASS tương ứng trong check cuối là hardcode, không phải bằng chứng.
+# - **Schema evolution là opt-in:** chỉ khi truyền `schema_mode="merge"` thì cột `tier` mới được thêm;
+#   3 dòng cũ đọc ra `tier = null` mà không rewrite file cũ (DuckDB thấy 2 nhóm: `premium`=1, `NULL`=3).

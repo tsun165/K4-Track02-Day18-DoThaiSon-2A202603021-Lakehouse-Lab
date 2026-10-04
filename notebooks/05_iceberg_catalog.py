@@ -299,3 +299,18 @@ for k, v in checks.items():
     print(f"  [{'PASS' if v else 'FAIL'}] {k}")
 assert all(checks.values()), "NB5 incomplete — see FAIL rows above"
 print("\nNB5 complete.")
+
+# %% [markdown]
+# ## Giải thích kết quả (NB5)
+#
+# - **Catalog là control plane:** bảng được tạo qua `SqlCatalog` (`lake.llm_events`); catalog giữ con trỏ
+#   tới `metadata.json` hiện tại, commit = đổi con trỏ đó một cách atomic.
+# - **Hidden partitioning, pruning 10×:** partition spec là `day(ts)`; `ts_day` không phải cột người dùng
+#   ghi mà được suy ra từ transform đã lưu. Filter trên `ts` (không phải `ts_day`) → `plan_files()` chỉ chọn
+#   1/10 file. Người dùng Hive quên predicate `dt=` sẽ đọc cả 10 file (~$220/ngày ở 10K query theo giả định
+#   của notebook).
+# - **Metadata 3 tầng:** metadata.json → 10 manifest list (mỗi snapshot một file) → manifest → 10 data file.
+#   Metadata ≈ 292% dữ liệu vì mỗi file chỉ ~500 dòng; với file 512 MB tỷ lệ này ~0.1%. File nhỏ bị phạt hai lần.
+# - **Schema evolution theo field-ID:** đổi tên `latency_ms → latency_millis` giữ `field_id=4`, không rewrite
+#   dữ liệu; thêm `tier` → dòng cũ đọc ra null.
+# - **Partition evolution:** data file thuộc 2 spec (`[1, 2]`) cùng tồn tại; đọc được đủ 5,500 dòng mà không rewrite.

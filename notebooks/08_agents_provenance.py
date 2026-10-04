@@ -479,3 +479,18 @@ for k, v in checks.items():
     print(f"  [{'PASS' if v else 'FAIL'}] {k}")
 assert all(checks.values()), "NB8 incomplete — see FAIL rows above"
 print("\nNB8 complete.")
+
+# %% [markdown]
+# ## Giải thích kết quả (NB8)
+#
+# - **Trajectory qua medallion:** 1,578 step; Silver partition theo `agent_version` (`policy-v2`, `policy-v3`);
+#   Gold so sánh 2 policy (150 trajectory mỗi bên, success 0.76 vs 0.753).
+# - **Pin version:** training run ghi `table_version=0` (1,578 step). Sau khi thêm rollout bảng lên v1 (1,978 step),
+#   replay ở v0 vẫn ra 1,578 → khớp. Lưu ý: chỉ kiểm tra số dòng, không kiểm tra nội dung bằng nhau.
+# - **Lớp MCP mô phỏng (offline):** 5 turn gọi `list_tables` → 1 lần đọc catalog nhờ cache TTL; lệnh xóa trả
+#   `input_required` trước khi chạy (cờ xác nhận do caller cung cấp, không phải ranh giới bảo mật);
+#   task `submit_scan` được poll đến `completed`.
+# - **Provenance:** cả 4 bucket minh họa (`licensed`, `public_domain`, `synthetic`, `scraped_optout_checked`) và
+#   `UNCLASSIFIED` là partition trên đĩa; training filter lấy 1,666/2,000 dòng, loại 334 dòng UNCLASSIFIED
+#   (`license=unknown`). Đây là quy tắc phân loại của lab, không phải kết luận pháp lý. Erasure `user_007`: 8 → 0 dòng
+#   ở version hiện tại, nhưng v0 vẫn chứa dữ liệu cũ cho tới khi retention/VACUUM xử lý.

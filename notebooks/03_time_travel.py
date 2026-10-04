@@ -132,3 +132,15 @@ for k, v in checks.items():
     print(f"  [{'PASS' if v else 'FAIL'}] {k}")
 assert all(checks.values()), "NB3 incomplete — see FAIL rows above"
 print("\nNB3 complete.")
+
+# %% [markdown]
+# ## Giải thích kết quả (NB3)
+#
+# - **Lịch sử:** v0 WRITE 100K → v1 overwrite có thêm cột `tier` → v2 **MERGE** 100K source rows
+#   (50K update + 50K insert, bảng lên 150K) → v3 ghi 50 dòng lỗi `score < 0` → v4 **RESTORE** về v2.
+#   `history()` có 5 version, có dòng RESTORE.
+# - **Time travel:** đọc `version=0` vẫn ra 100,000 dòng — các version cũ còn đọc được vì file
+#   parquet cũ chưa bị VACUUM.
+# - **RESTORE không xóa lịch sử:** nó là một commit mới (v4) ghi `remove` cho file của v3 và `add` lại
+#   file của v2, nên sau RESTORE `score < 0` = 0 nhưng v3 vẫn nằm trong log để audit. Rollback chỉ là
+#   thao tác metadata nên rất nhanh (xem thời gian ở cell RESTORE).

@@ -403,3 +403,17 @@ for k, v in checks.items():
     print(f"  [{'PASS' if v else 'FAIL'}] {k}")
 assert all(checks.values()), "NB7 incomplete — see FAIL rows above"
 print("\nNB7 complete.")
+
+# %% [markdown]
+# ## Giải thích kết quả (NB7)
+#
+# - **Inline vs pointer:** query phân tích (`GROUP BY topic`) chỉ đọc 1.2 KB ở cả hai layout — projection pushdown
+#   bỏ qua cột blob. Nhưng lấy **một** frame từ layout inline phải đọc cả row group 12.5 MB (file chỉ có 1 row group
+#   200 dòng) so với 64 KB qua pointer → **amplification 200×**. Đơn vị đọc nhỏ nhất của Parquet là row group (theo cột),
+#   không phải dòng, nên random access bị khuếch đại.
+# - **int8:** 4× nhỏ hơn trong RAM, 5.8× nhỏ hơn trên đĩa sau nén; recall@10 = 0.904 và topic fidelity = 1.000 —
+#   các "miss" là hoán đổi giữa các neighbour gần tương đương nên RAG gần như không bị ảnh hưởng.
+# - **Semantic search bằng SQL:** top-5 của `storage-note-00007` đều thuộc topic `storage` (sim ~0.77). Brute-force
+#   24 ms ở 2K vector, nhưng tuyến tính → ~12 s ở 1M, nên vector DB là index dẫn xuất, lakehouse là system-of-record.
+# - **Lifecycle bug:** xóa 8 doc của `user_042` → lakehouse còn 0 hit, external index vẫn trả 8 hit (vi phạm erasure)
+#   vì sync một chiều quên lệnh delete. Change Data Feed phát 8 sự kiện delete để index subscribe và evict.

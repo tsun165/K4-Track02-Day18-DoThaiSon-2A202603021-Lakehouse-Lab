@@ -155,3 +155,17 @@ assert n_dates >= 7, (
 # - [ ] Silver has fewer rows than Bronze (dedup worked)
 # - [ ] Gold spans ≥ 7 dates × 3 models (slide §8 medallion contract)
 # - [ ] Cost & error_rate columns populated and non-zero
+
+# %% [markdown]
+# ## Giải thích kết quả (NB4)
+#
+# - **Bronze → Silver:** Bronze 200,000 dòng raw (`raw_json`); Silver 190,052 sau khi parse JSON,
+#   bỏ dòng thiếu `model` và dedup bằng `ROW_NUMBER() OVER (PARTITION BY request_id)`.
+#   Số dòng bị bỏ (9,948) khớp đúng số duplicate mà generator cố ý seed (mô phỏng client retry).
+# - **Gold:** 24 dòng = 8 ngày × 3 model, đủ p50/p95 latency, token, `error_rate` (~4–6%) và `cost_usd`.
+#   Opus có p50 ~3,000 ms (gấp ~2× Sonnet, ~5× Haiku); chỉ dùng ~1/6 số token của Sonnet nhưng chi phí/ngày
+#   đã bằng ~85% Sonnet vì đơn giá cao hơn 5×.
+# - **Vì sao 8 ngày chứ không phải 7:** generator sinh 7 ngày *UTC*, nhưng `CAST(ts AS DATE)` trong DuckDB
+#   dùng timezone của session (máy chạy ở UTC+7). 00:00 UTC ngày 01/04 = 07:00 giờ VN, nên ngày 01/04 chỉ có
+#   ~17/24 lượng token, còn 7 giờ cuối ngày 07/04 UTC rơi sang ngày 08/04 (~7/24). Trong production nên cố định
+#   timezone (vd. `SET TimeZone='UTC'`) để Gold không phụ thuộc máy chạy.

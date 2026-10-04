@@ -176,3 +176,15 @@ print(f"\n  (speedup={speedup:.1f}x, pruning={pruned_ratio:.1f}x — the slide a
 print("   wall-clock is noisy on a laptop, which is why file-pruning is the fallback.)")
 assert all(checks.values()), "NB2 incomplete — see FAIL rows above"
 print("\nNB2 complete.")
+
+# %% [markdown]
+# ## Giải thích kết quả (NB2)
+#
+# - **Small-file problem:** 200 lần append nhỏ → 200 file (≥ 100). Query điểm phải mở cả 200 file;
+#   chi phí mở file/đọc footer lấn át lượng dữ liệu thật.
+# - **OPTIMIZE + Z-ORDER(user_id):** 200 → 55 file. Speedup đo được ở trên (median 3 lần đo,
+#   wall-clock nên dao động theo máy) đạt ngưỡng ≥ 3×; quan trọng hơn là **pruning 55×**.
+# - **Vì sao pruning 55×:** sau Z-order, mỗi file chứa một dải `user_id` hẹp và gần như không chồng lấn
+#   (xem min/max trong action `add` của commit OPTIMIZE ở cell 5). Với `user_id = X`, engine so X với
+#   min/max từng file và chỉ mở **1/55 file**. Trước Z-order, min/max mỗi file trải gần hết dải giá trị
+#   nên stats không loại được file nào. Compaction giảm số file; Z-order mới làm stats *có ích*.

@@ -438,3 +438,23 @@ for k, v in checks.items():
     print(f"  [{'PASS' if v else 'FAIL'}] {k}")
 assert all(checks.values()), "NB6 incomplete — see FAIL rows above"
 print("\nNB6 complete.")
+
+# %% [markdown]
+# ## Giải thích kết quả (NB6)
+#
+# - **Job 1 Compaction:** 200 → 11 file (18×, ngưỡng ≥ 10×). Bytes tạm thời *tăng* (10.1 → 16.1 MB) vì file mới
+#   được ghi trước khi file cũ bị dọn.
+# - **Job 2 Clustering:** point query `user_id=12345` phải mở 11/11 file trước, 1/10 file sau → skip 90%.
+#   Lý do: sau clustering, min/max của từng file không chồng lấn nên stats chứng minh được file nào không chứa giá trị.
+# - **Job 3 Expiry:** Delta VACUUM dọn 211 file đã tombstone (16.1 → 6.2 MB) và mất khả năng time travel về v0.
+#   Iceberg `expire_snapshots`: 20 → 3 snapshot nhưng số avro trên đĩa vẫn 40 → 40 — với PyIceberg trong lab này,
+#   expiry chỉ sửa metadata, chưa xóa file vật lý.
+# - **Job 4 Orphans:** 3 file "crashed writer" (30 ngày tuổi) không bao giờ được commit nên không bị tombstone →
+#   `deltalake` VACUUM không thấy. Phép hiệu tập hợp (file trên đĩa − file trong log, có age guard 24h) tìm và xóa
+#   đúng 3 orphan. Lưu ý: dòng "5 files you pay for" đếm cả 2 file checkpoint (`...099`, `...199.checkpoint.parquet`)
+#   mà delta-rs tự ghi trong `_delta_log/` — `count_files` dùng `rglob("*.parquet")` nên tính luôn; orphan thật chỉ là 3.
+#   Phía Iceberg, sweep 17 manifest list bị bỏ lại sau expiry → 40 → 23 avro, dữ liệu vẫn đủ 2,000 dòng.
+#   Job 3 và Job 4 phải chạy thành cặp.
+# - **Job 5 Checkpoint:** có `*.checkpoint.parquet` + `_last_checkpoint` (delta-rs tự checkpoint mỗi 100 commit,
+#   `create_checkpoint()` ghi thêm một bản ở version mới nhất; output in file đầu tiên mà glob trả về). Reader mới chỉ
+#   load checkpoint + vài JSON sau đó thay vì replay 204 JSON.
